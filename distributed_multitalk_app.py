@@ -34,6 +34,9 @@ from pathlib import Path
 # 添加项目路径
 sys.path.append(str(Path(__file__).parent))
 
+import os
+import socket
+import subprocess
 from distributed_multitalk_core import _parse_args
 from distributed_generator import DistributedMultiTalkGenerator
 from distributed_web_interface import create_gradio_interface
@@ -152,6 +155,33 @@ def get_port_process_info(port):
 def main():
     """主函数"""
     
+    # 解析参数
+    args = _parse_args()
+    
+    # 检查是否在分布式环境中运行
+    rank = int(os.getenv("RANK", 0))
+    world_size = int(os.getenv("WORLD_SIZE", 1))
+    
+    # 只有主进程(rank 0)才启动Web服务
+    if world_size > 1 and rank != 0:
+        print(f"🔄 进程 {rank} 正在等待主进程启动Web服务...")
+        # 非主进程只需要初始化分布式生成器，不启动Web服务
+        try:
+            generator = DistributedMultiTalkGenerator(args)
+            print(f"✅ 进程 {rank} 分布式生成器初始化完成")
+            # 保持进程运行，等待分布式任务
+            import time
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print(f"\n🔚 进程 {rank} 已关闭")
+        except Exception as e:
+            print(f"❌ 进程 {rank} 发生错误: {e}")
+        return
+    
+    # 主进程执行端口检查和Web服务启动
+    print(f"🌟 主进程 (rank {rank}) 正在启动Web服务...")
+    
     # 打印启动信息
     print("=" * 60)
     print("🎬 分布式MultiTalk双人对话视频生成服务")
@@ -163,9 +193,6 @@ def main():
     print("- 📺 720P高清输出")
     print("- 🚀 分布式推理")
     print("=" * 60)
-    
-    # 解析参数
-    args = _parse_args()
     
     # 首先检查端口可用性，避免在模型加载后才发现端口被占用
     print("🔍 检查端口可用性...")

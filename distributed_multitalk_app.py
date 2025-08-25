@@ -40,6 +40,7 @@ import subprocess
 from distributed_multitalk_core import _parse_args
 from distributed_generator import DistributedMultiTalkGenerator
 from distributed_web_interface import create_gradio_interface
+from debug_config import DebugConfig
 
 
 def check_port_available(port, host='0.0.0.0'):
@@ -322,24 +323,32 @@ def main():
 def validate_environment():
     """验证运行环境"""
     
-    # 检查必要的目录
-    required_dirs = [
-        "weights/Wan2.1-I2V-14B-720P",
-        "weights/chinese-wav2vec2-base", 
-        "weights/Kokoro-82M"
-    ]
-    
-    missing_dirs = []
-    for dir_path in required_dirs:
-        if not Path(dir_path).exists():
-            missing_dirs.append(dir_path)
-    
-    if missing_dirs:
-        print("❌ 缺少必要的模型文件目录:")
-        for dir_path in missing_dirs:
-            print(f"   - {dir_path}")
-        print("\n请确保已下载所有必要的模型文件")
-        return False
+    # 检查是否为DEBUG模式
+    if DebugConfig.is_debug_mode():
+        print("🐛 DEBUG模式已启用，跳过模型文件检查")
+        print("   使用Mock模型进行调试")
+    else:
+        # 检查必要的目录
+        required_dirs = [
+            "weights/Wan2.1-I2V-14B-720P",
+            "weights/chinese-wav2vec2-base", 
+            "weights/Kokoro-82M"
+        ]
+        
+        missing_dirs = []
+        for dir_path in required_dirs:
+            if not Path(dir_path).exists():
+                missing_dirs.append(dir_path)
+        
+        if missing_dirs:
+            print("❌ 缺少必要的模型文件目录:")
+            for dir_path in missing_dirs:
+                print(f"   - {dir_path}")
+            print("\n请确保已下载所有必要的模型文件")
+            print("\n💡 提示: 如需调试，可设置环境变量启用DEBUG模式:")
+            print("   set MULTITALK_DEBUG=true")
+            print("   set MULTITALK_MOCK_OUTPUTS=true")
+            return False
     
     # 检查GPU
     try:

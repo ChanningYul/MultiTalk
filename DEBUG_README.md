@@ -18,19 +18,29 @@ python debug_run.py
 
 ```bash
 # Windows PowerShell
-$env:DEBUG_MODE = "1"
-$env:MOCK_MODEL_OUTPUTS = "1"
+$env:MULTITALK_DEBUG = "true"
+$env:MULTITALK_MOCK_OUTPUTS = "true"
 python distributed_multitalk_app.py
 
 # Windows CMD
-set DEBUG_MODE=1
-set MOCK_MODEL_OUTPUTS=1
+set MULTITALK_DEBUG=true
+set MULTITALK_MOCK_OUTPUTS=true
 python distributed_multitalk_app.py
 
 # Linux/Mac
-export DEBUG_MODE=1
-export MOCK_MODEL_OUTPUTS=1
+export MULTITALK_DEBUG=true
+export MULTITALK_MOCK_OUTPUTS=true
 python distributed_multitalk_app.py
+```
+
+### 方法3: 使用便捷启动脚本
+
+```bash
+# Windows CMD
+start_debug_mode.bat
+
+# Windows PowerShell
+.\start_debug_mode.ps1
 ```
 
 ### 方法3: 在代码中设置
@@ -194,6 +204,74 @@ DebugConfig.create_debug_audio_output(
     sample_rate=22050
 )
 ```
+
+## 🔧 常见问题解决
+
+### 问题: 提示缺少模型文件目录
+
+**错误信息:**
+```
+❌ 缺少必要的模型文件目录:
+   - weights/Wan2.1-I2V-14B-720P
+   - weights/chinese-wav2vec2-base
+   - weights/Kokoro-82M
+```
+
+**解决方案:**
+
+1. **确认DEBUG模式已启用**
+   ```bash
+   # 检查环境变量
+   echo $env:MULTITALK_DEBUG
+   echo $env:MULTITALK_MOCK_OUTPUTS
+   ```
+
+2. **正确设置环境变量**
+   ```bash
+   # PowerShell
+   $env:MULTITALK_DEBUG='true'
+   $env:MULTITALK_MOCK_OUTPUTS='true'
+   
+   # CMD
+   set MULTITALK_DEBUG=true
+   set MULTITALK_MOCK_OUTPUTS=true
+   ```
+
+3. **使用便捷启动脚本**
+   ```bash
+   # 自动设置环境变量并启动
+   start_debug_mode.bat
+   # 或
+   .\start_debug_mode.ps1
+   ```
+
+4. **验证DEBUG模式状态**
+   - 启动时应显示: `🐛 DEBUG模式已启用，跳过模型文件检查`
+   - 如果仍提示缺少文件，请重新设置环境变量
+
+### 问题: 模块导入错误
+
+**解决方案:**
+```bash
+# 安装缺失的依赖
+pip install -r requirements.txt
+
+# 或单独安装
+pip install torch gradio numpy pillow
+```
+
+### 问题: 端口被占用
+
+**解决方案:**
+```bash
+# 使用不同端口启动
+python distributed_multitalk_app.py --server_port=8420
+```
+
+## 📚 相关文档
+
+- [DEBUG_MODE_GUIDE.md](DEBUG_MODE_GUIDE.md) - 详细的DEBUG模式使用指南
+- [TORCH_CAT_ERROR_FIX.md](TORCH_CAT_ERROR_FIX.md) - torch.cat()错误修复说明
 
 ## 总结
 

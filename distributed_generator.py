@@ -243,27 +243,59 @@ class DistributedMultiTalkGenerator:
                     generator = pipeline(content, voice=voice_tensor, speed=1, split_pattern=r'\n+')
                     audios = []
                     for gs, ps, audio in generator:
-                        audios.append(audio)
-                    audios = torch.concat(audios, dim=0)
-                    s1_sentences.append(audios)
-                    s2_sentences.append(torch.zeros_like(audios))
+                        if audio is not None and audio.numel() > 0:
+                            audios.append(audio)
+                    
+                    if audios:
+                        audios = torch.concat(audios, dim=0)
+                        s1_sentences.append(audios)
+                        s2_sentences.append(torch.zeros_like(audios))
+                    else:
+                        logging.warning(f"[WARNING] 说话人1的内容'{content}'没有生成有效音频")
                     
                 elif speaker == '2':
                     voice_tensor = torch.load(voice2_path, weights_only=True)
                     generator = pipeline(content, voice=voice_tensor, speed=1, split_pattern=r'\n+')
                     audios = []
                     for gs, ps, audio in generator:
-                        audios.append(audio)
-                    audios = torch.concat(audios, dim=0)
-                    s2_sentences.append(audios)
-                    s1_sentences.append(torch.zeros_like(audios))
+                        if audio is not None and audio.numel() > 0:
+                            audios.append(audio)
+                    
+                    if audios:
+                        audios = torch.concat(audios, dim=0)
+                        s2_sentences.append(audios)
+                        s1_sentences.append(torch.zeros_like(audios))
+                    else:
+                        logging.warning(f"[WARNING] 说话人2的内容'{content}'没有生成有效音频")
             
-            if not s1_sentences:
+            if not s1_sentences and not s2_sentences:
                 raise ValueError("对话脚本中没有找到有效的对话内容")
             
-            s1_sentences = torch.concat(s1_sentences, dim=0)
-            s2_sentences = torch.concat(s2_sentences, dim=0)
-            sum_sentences = s1_sentences + s2_sentences
+            # 处理空列表的情况
+            if s1_sentences:
+                s1_audio = torch.concat(s1_sentences, dim=0)
+            else:
+                logging.warning("[WARNING] 说话人1没有有效音频，使用静音")
+                # 创建与s2相同长度的静音
+                if s2_sentences:
+                    s2_temp = torch.concat(s2_sentences, dim=0)
+                    s1_audio = torch.zeros_like(s2_temp)
+                else:
+                    s1_audio = torch.zeros(24000)  # 1秒静音
+            
+            if s2_sentences:
+                s2_audio = torch.concat(s2_sentences, dim=0)
+            else:
+                logging.warning("[WARNING] 说话人2没有有效音频，使用静音")
+                # 创建与s1相同长度的静音
+                s2_audio = torch.zeros_like(s1_audio)
+            
+            # 确保两个音频长度一致
+            min_length = min(len(s1_audio), len(s2_audio))
+            s1_audio = s1_audio[:min_length]
+            s2_audio = s2_audio[:min_length]
+            
+            sum_sentences = s1_audio + s2_audio
             
             # 保存音频文件
             session_id = uuid.uuid4().hex
@@ -274,8 +306,8 @@ class DistributedMultiTalkGenerator:
             save_path2 = save_dir / 's2.wav'
             save_path_sum = save_dir / 'sum.wav'
             
-            sf.write(save_path1, s1_sentences, 24000)
-            sf.write(save_path2, s2_sentences, 24000)
+            sf.write(save_path1, s1_audio, 24000)
+            sf.write(save_path2, s2_audio, 24000)
             sf.write(save_path_sum, sum_sentences, 24000)
             
             # 转换为16kHz用于embedding
@@ -292,6 +324,14 @@ class DistributedMultiTalkGenerator:
     def get_audio_embedding(self, speech_array, sr=16000):
         """获取音频embedding"""
         try:
+            # 检查输入音频是否为空
+            if speech_array is None or len(speech_array) == 0:
+                logging.warning("[WARNING] 输入音频为空，返回默认embedding")
+                # 返回默认的embedding形状 (seq_len, batch_size, hidden_dim)
+                default_seq_len = 100  # 默认序列长度
+                default_hidden_dim = 768  # 默认隐藏维度
+                return torch.zeros(default_seq_len, 1, default_hidden_dim)
+            
             audio_duration = len(speech_array) / sr
             video_length = audio_duration * 25  # 假设视频fps为25
             
@@ -308,11 +348,21 @@ class DistributedMultiTalkGenerator:
                     audio_feature, seq_len=int(video_length), output_hidden_states=True
                 )
             
-            if len(embeddings) == 0:
-                logging.error("提取音频embedding失败")
-                return None
+            if len(embeddings) == 0 or not hasattr(embeddings, 'hidden_states') or len(embeddings.hidden_states) <= 1:
+                logging.warning("[WARNING] 音频编码器返回空结果，返回默认embedding")
+                default_seq_len = max(1, int(video_length))
+                default_hidden_dim = 768
+                return torch.zeros(default_seq_len, 1, default_hidden_dim)
             
-            audio_emb = torch.stack(embeddings.hidden_states[1:], dim=1).squeeze(0)
+            # 检查hidden_states是否有足够的层
+            hidden_states_to_stack = embeddings.hidden_states[1:]
+            if len(hidden_states_to_stack) == 0:
+                logging.warning("[WARNING] 没有足够的hidden states，返回默认embedding")
+                default_seq_len = max(1, int(video_length))
+                default_hidden_dim = 768
+                return torch.zeros(default_seq_len, 1, default_hidden_dim)
+            
+            audio_emb = torch.stack(hidden_states_to_stack, dim=1).squeeze(0)
             audio_emb = rearrange(audio_emb, "b s d -> s b d")
             audio_emb = audio_emb.cpu().detach()
             

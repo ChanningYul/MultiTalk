@@ -93,19 +93,34 @@ class MockKPipeline:
     def __init__(self, *args, **kwargs):
         logging.info("[DEBUG] 使用Mock Kokoro TTS管道")
     
-    def __call__(self, text, voice_path=None, *args, **kwargs):
-        """模拟TTS生成"""
+    def __call__(self, text, voice=None, speed=1.0, split_pattern=None, *args, **kwargs):
+        """模拟TTS生成，返回生成器"""
         logging.info(f"[DEBUG] 模拟TTS生成: {text[:50]}...")
         
-        # 生成5秒的随机音频数据
-        duration = 5.0
-        sample_rate = 22050
-        audio_length = int(duration * sample_rate)
+        # 模拟生成器行为，返回生成器
+        def mock_generator():
+            # 根据文本长度生成合适的音频长度
+            text_length = len(text)
+            duration = max(1.0, min(text_length * 0.1, 10.0))  # 0.1秒每字符，最少1秒，最多10秒
+            sample_rate = 22050
+            audio_length = int(duration * sample_rate / speed)
+            
+            # 生成模拟的音频波形
+            audio = torch.randn(audio_length) * 0.1
+            
+            # 模拟分段生成，每段1-2秒
+            segment_length = int(sample_rate * 2 / speed)  # 2秒每段
+            
+            for i in range(0, audio_length, segment_length):
+                end_idx = min(i + segment_length, audio_length)
+                audio_segment = audio[i:end_idx]
+                
+                # 返回 (gs, ps, audio) 格式，模拟真实的KPipeline输出
+                gs = None  # grapheme sequence (不需要)
+                ps = None  # phoneme sequence (不需要)
+                yield gs, ps, audio_segment
         
-        # 生成模拟的音频波形
-        audio = np.random.randn(audio_length) * 0.1
-        
-        return audio, sample_rate
+        return mock_generator()
 
 class DebugConfig:
     """调试配置类"""

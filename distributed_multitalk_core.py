@@ -115,7 +115,7 @@ def _parse_args():
     parser.add_argument("--task", type=str, default="multitalk-14B", help="The task to run.")
     parser.add_argument("--size", type=str, default="multitalk-720", help="Video resolution.")
     parser.add_argument("--frame_num", type=int, default=81, help="Number of frames to generate.")
-    parser.add_argument("--ckpt_dir", type=str, default='./weights/Wan2.1-I2V-14B-480P', 
+    parser.add_argument("--ckpt_dir", type=str, default='./weights/Wan2.1-I2V-14B-720P', 
                        help="Path to checkpoint directory.")
     parser.add_argument("--quant_dir", type=str, default=None, help="Path to quantized checkpoint directory.")
     parser.add_argument("--wav2vec_dir", type=str, default='./weights/chinese-wav2vec2-base',

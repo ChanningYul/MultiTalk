@@ -120,7 +120,7 @@ def validate_environment():
     
     # 检查必要的目录
     required_dirs = [
-        "weights/Wan2.1-I2V-14B-480P",
+        "weights/Wan2.1-I2V-14B-720P",
         "weights/chinese-wav2vec2-base", 
         "weights/Kokoro-82M"
     ]

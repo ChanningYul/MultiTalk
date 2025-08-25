@@ -78,6 +78,13 @@ class WanRMSNorm(nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化权重参数为全1
+        nn.init.ones_(self.weight)
+
     def forward(self, x):
         r"""
         Args:

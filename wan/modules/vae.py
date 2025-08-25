@@ -48,6 +48,16 @@ class RMS_norm(nn.Module):
         self.gamma = nn.Parameter(torch.ones(shape))
         self.bias = nn.Parameter(torch.zeros(shape)) if bias else 0.
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 gamma 参数为全1
+        nn.init.ones_(self.gamma)
+        # 如果有 bias 参数，重新初始化为全0
+        if isinstance(self.bias, nn.Parameter):
+            nn.init.zeros_(self.bias)
+
     def forward(self, x):
         return F.normalize(
             x, dim=(1 if self.channel_first else

@@ -21,6 +21,7 @@ from kokoro import KPipeline
 from transformers import Wav2Vec2FeatureExtractor
 from src.audio_analysis.wav2vec2 import Wav2Vec2Model
 from distributed_multitalk_core import DialogueScriptParser
+from debug_config import DebugConfig, MockWav2VecModel, MockWav2VecFeatureExtractor, MockMultiTalkPipeline, MockKPipeline
 
 
 class DistributedMultiTalkGenerator:
@@ -28,6 +29,14 @@ class DistributedMultiTalkGenerator:
     
     def __init__(self, args):
         self.args = args
+        
+        # 设置调试模式
+        DebugConfig.setup_debug_logging()
+        self.debug_mode = DebugConfig.is_debug_mode()
+        
+        if self.debug_mode:
+            logging.info("[DEBUG] 调试模式已启用，将使用Mock模型")
+        
         self.setup_distributed()
         self.setup_models()
         self.dialogue_parser = DialogueScriptParser()
@@ -104,27 +113,31 @@ class DistributedMultiTalkGenerator:
         os.makedirs(self.args.audio_save_dir, exist_ok=True)
         
         # 初始化MultiTalk管道
-        logging.info("正在创建MultiTalk管道...")
-        self.wan_pipeline = wan.MultiTalkPipeline(
-            config=cfg,
-            checkpoint_dir=self.args.ckpt_dir,
-            quant_dir=self.args.quant_dir,
-            device_id=self.device,
-            rank=self.rank,
-            t5_fsdp=self.args.t5_fsdp,
-            dit_fsdp=self.args.dit_fsdp,
-            use_usp=(self.args.ulysses_size > 1 or self.args.ring_size > 1),
-            t5_cpu=self.args.t5_cpu,
-            lora_dir=self.args.lora_dir,
-            lora_scales=self.args.lora_scale,
-            quant=self.args.quant
-        )
-        
-        if self.args.num_persistent_param_in_dit is not None:
-            self.wan_pipeline.vram_management = True
-            self.wan_pipeline.enable_vram_management(
-                num_persistent_param_in_dit=self.args.num_persistent_param_in_dit
+        if self.debug_mode:
+            logging.info("[DEBUG] 使用Mock MultiTalk管道")
+            self.wan_pipeline = MockMultiTalkPipeline(device=self.device)
+        else:
+            logging.info("正在创建MultiTalk管道...")
+            self.wan_pipeline = wan.MultiTalkPipeline(
+                config=cfg,
+                checkpoint_dir=self.args.ckpt_dir,
+                quant_dir=self.args.quant_dir,
+                device_id=self.device,
+                rank=self.rank,
+                t5_fsdp=self.args.t5_fsdp,
+                dit_fsdp=self.args.dit_fsdp,
+                use_usp=(self.args.ulysses_size > 1 or self.args.ring_size > 1),
+                t5_cpu=self.args.t5_cpu,
+                lora_dir=self.args.lora_dir,
+                lora_scales=self.args.lora_scale,
+                quant=self.args.quant
             )
+            
+            if self.args.num_persistent_param_in_dit is not None:
+                self.wan_pipeline.vram_management = True
+                self.wan_pipeline.enable_vram_management(
+                    num_persistent_param_in_dit=self.args.num_persistent_param_in_dit
+                )
         
         logging.info("模型初始化完成！")
     
@@ -141,14 +154,19 @@ class DistributedMultiTalkGenerator:
     
     def _init_audio_models(self):
         """初始化音频相关模型"""
-        logging.info("正在加载音频模型...")
-        audio_encoder = Wav2Vec2Model.from_pretrained(
-            self.args.wav2vec_dir, local_files_only=True
-        ).to('cpu')
-        audio_encoder.feature_extractor._freeze_parameters()
-        wav2vec_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-            self.args.wav2vec_dir, local_files_only=True
-        )
+        if self.debug_mode:
+            logging.info("[DEBUG] 使用Mock音频模型")
+            audio_encoder = MockWav2VecModel(device='cpu')
+            wav2vec_feature_extractor = MockWav2VecFeatureExtractor()
+        else:
+            logging.info("正在加载音频模型...")
+            audio_encoder = Wav2Vec2Model.from_pretrained(
+                self.args.wav2vec_dir, local_files_only=True
+            ).to('cpu')
+            audio_encoder.feature_extractor._freeze_parameters()
+            wav2vec_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
+                self.args.wav2vec_dir, local_files_only=True
+            )
         logging.info("音频模型加载完成")
         return wav2vec_feature_extractor, audio_encoder
     
@@ -209,7 +227,11 @@ class DistributedMultiTalkGenerator:
             s1_sentences = []
             s2_sentences = []
             
-            pipeline = KPipeline(lang_code='a', repo_id='weights/Kokoro-82M')
+            if self.debug_mode:
+                logging.info("[DEBUG] 使用Mock TTS管道")
+                pipeline = MockKPipeline()
+            else:
+                pipeline = KPipeline(lang_code='a', repo_id='weights/Kokoro-82M')
             
             for speaker, content in matches:
                 content = content.strip()

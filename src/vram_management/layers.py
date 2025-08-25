@@ -87,8 +87,22 @@ class AutoWrappedQLinear(qlinear.QLinear):
                 bias=module.bias is not None,
                 device=offload_device,
             )
-        self.weight = module.weight
-        self.bias = module.bias
+        # 确保weight和bias是nn.Parameter类型，用于FSDP兼容性
+        if module.weight is not None:
+            if isinstance(module.weight, torch.nn.Parameter):
+                self.weight = module.weight
+            else:
+                self.weight = torch.nn.Parameter(module.weight.data)
+        else:
+            self.weight = None
+            
+        if module.bias is not None:
+            if isinstance(module.bias, torch.nn.Parameter):
+                self.bias = module.bias
+            else:
+                self.bias = torch.nn.Parameter(module.bias.data)
+        else:
+            self.bias = None
         self.offload_device = offload_device
 
         self.onload_device = onload_device
@@ -144,8 +158,22 @@ class AutoWrappedLinear(torch.nn.Linear):
                 dtype=offload_dtype,
                 device=offload_device,
             )
-        self.weight = module.weight
-        self.bias = module.bias
+        # 确保weight和bias是nn.Parameter类型，用于FSDP兼容性
+        if module.weight is not None:
+            if isinstance(module.weight, torch.nn.Parameter):
+                self.weight = module.weight
+            else:
+                self.weight = torch.nn.Parameter(module.weight.data)
+        else:
+            self.weight = None
+            
+        if module.bias is not None:
+            if isinstance(module.bias, torch.nn.Parameter):
+                self.bias = module.bias
+            else:
+                self.bias = torch.nn.Parameter(module.bias.data)
+        else:
+            self.bias = None
         self.offload_dtype = offload_dtype
         self.offload_device = offload_device
         self.onload_dtype = onload_dtype

@@ -275,6 +275,55 @@ class WanAttentionBlock(nn.Module):
         # modulation
         self.modulation = nn.Parameter(torch.randn(1, 6, dim) / dim**0.5)
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 self_attn 的参数
+        if hasattr(self.self_attn, 'reset_parameters'):
+            self.self_attn.reset_parameters()
+        else:
+            # 手动重新初始化 self_attn 的线性层
+            nn.init.xavier_uniform_(self.self_attn.q.weight)
+            nn.init.zeros_(self.self_attn.q.bias)
+            nn.init.xavier_uniform_(self.self_attn.k.weight)
+            nn.init.zeros_(self.self_attn.k.bias)
+            nn.init.xavier_uniform_(self.self_attn.v.weight)
+            nn.init.zeros_(self.self_attn.v.bias)
+            nn.init.xavier_uniform_(self.self_attn.o.weight)
+            nn.init.zeros_(self.self_attn.o.bias)
+        
+        # 重新初始化 cross_attn 的参数
+        if hasattr(self.cross_attn, 'reset_parameters'):
+            self.cross_attn.reset_parameters()
+        else:
+            # 手动重新初始化 cross_attn 的线性层
+            nn.init.xavier_uniform_(self.cross_attn.q.weight)
+            nn.init.zeros_(self.cross_attn.q.bias)
+            nn.init.xavier_uniform_(self.cross_attn.k.weight)
+            nn.init.zeros_(self.cross_attn.k.bias)
+            nn.init.xavier_uniform_(self.cross_attn.v.weight)
+            nn.init.zeros_(self.cross_attn.v.bias)
+            nn.init.xavier_uniform_(self.cross_attn.o.weight)
+            nn.init.zeros_(self.cross_attn.o.bias)
+            
+            # 如果是 I2V cross attention，还需要初始化额外的参数
+            if hasattr(self.cross_attn, 'k_img'):
+                nn.init.xavier_uniform_(self.cross_attn.k_img.weight)
+                nn.init.zeros_(self.cross_attn.k_img.bias)
+                nn.init.xavier_uniform_(self.cross_attn.v_img.weight)
+                nn.init.zeros_(self.cross_attn.v_img.bias)
+        
+        # 重新初始化 FFN 的参数
+        for layer in self.ffn:
+            if isinstance(layer, nn.Linear):
+                nn.init.xavier_uniform_(layer.weight)
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
+        
+        # 重新初始化 modulation 参数
+        nn.init.normal_(self.modulation, std=1.0 / self.dim**0.5)
+
     def forward(
         self,
         x,

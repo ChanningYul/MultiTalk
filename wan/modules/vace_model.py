@@ -30,6 +30,22 @@ class VaceWanAttentionBlock(WanAttentionBlock):
         nn.init.zeros_(self.after_proj.weight)
         nn.init.zeros_(self.after_proj.bias)
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 调用父类的 reset_parameters
+        super().reset_parameters()
+        
+        # 重新初始化额外的参数
+        if self.block_id == 0 and hasattr(self, 'before_proj'):
+            nn.init.zeros_(self.before_proj.weight)
+            nn.init.zeros_(self.before_proj.bias)
+        
+        if hasattr(self, 'after_proj'):
+            nn.init.zeros_(self.after_proj.weight)
+            nn.init.zeros_(self.after_proj.bias)
+
     def forward(self, c, x, **kwargs):
         if self.block_id == 0:
             c = self.before_proj(c) + x
@@ -54,6 +70,13 @@ class BaseWanAttentionBlock(WanAttentionBlock):
         super().__init__(cross_attn_type, dim, ffn_dim, num_heads, window_size,
                          qk_norm, cross_attn_norm, eps)
         self.block_id = block_id
+
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 调用父类的 reset_parameters
+        super().reset_parameters()
 
     def forward(self, x, hints, context_scale=1.0, **kwargs):
         x = super().forward(x, **kwargs)

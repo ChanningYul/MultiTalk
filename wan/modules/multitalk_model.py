@@ -270,6 +270,72 @@ class WanAttentionBlock(nn.Module):
             )
         self.norm_x = WanLayerNorm(dim, eps, elementwise_affine=True)  if norm_input_visual else nn.Identity()
         
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 self_attn 的参数
+        if hasattr(self.self_attn, 'reset_parameters'):
+            self.self_attn.reset_parameters()
+        else:
+            # 手动重新初始化 self_attn 的线性层
+            nn.init.xavier_uniform_(self.self_attn.q.weight)
+            nn.init.zeros_(self.self_attn.q.bias)
+            nn.init.xavier_uniform_(self.self_attn.k.weight)
+            nn.init.zeros_(self.self_attn.k.bias)
+            nn.init.xavier_uniform_(self.self_attn.v.weight)
+            nn.init.zeros_(self.self_attn.v.bias)
+            nn.init.xavier_uniform_(self.self_attn.o.weight)
+            nn.init.zeros_(self.self_attn.o.bias)
+        
+        # 重新初始化 cross_attn 的参数
+        if hasattr(self.cross_attn, 'reset_parameters'):
+            self.cross_attn.reset_parameters()
+        else:
+            # 手动重新初始化 cross_attn 的线性层
+            nn.init.xavier_uniform_(self.cross_attn.q.weight)
+            nn.init.zeros_(self.cross_attn.q.bias)
+            nn.init.xavier_uniform_(self.cross_attn.k.weight)
+            nn.init.zeros_(self.cross_attn.k.bias)
+            nn.init.xavier_uniform_(self.cross_attn.v.weight)
+            nn.init.zeros_(self.cross_attn.v.bias)
+            nn.init.xavier_uniform_(self.cross_attn.o.weight)
+            nn.init.zeros_(self.cross_attn.o.bias)
+            
+            # I2V cross attention 的额外参数
+            if hasattr(self.cross_attn, 'k_img'):
+                nn.init.xavier_uniform_(self.cross_attn.k_img.weight)
+                nn.init.zeros_(self.cross_attn.k_img.bias)
+                nn.init.xavier_uniform_(self.cross_attn.v_img.weight)
+                nn.init.zeros_(self.cross_attn.v_img.bias)
+        
+        # 重新初始化 FFN 的参数
+        for layer in self.ffn:
+            if isinstance(layer, nn.Linear):
+                nn.init.xavier_uniform_(layer.weight)
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
+        
+        # 重新初始化 modulation 参数
+        nn.init.normal_(self.modulation, std=1.0 / self.dim**0.5)
+        
+        # 重新初始化 audio_cross_attn 的参数
+        if hasattr(self.audio_cross_attn, 'reset_parameters'):
+            self.audio_cross_attn.reset_parameters()
+        else:
+            # 手动重新初始化 audio_cross_attn 的线性层
+            if hasattr(self.audio_cross_attn, 'q_linear'):
+                nn.init.xavier_uniform_(self.audio_cross_attn.q_linear.weight)
+                if self.audio_cross_attn.q_linear.bias is not None:
+                    nn.init.zeros_(self.audio_cross_attn.q_linear.bias)
+            if hasattr(self.audio_cross_attn, 'kv_linear'):
+                nn.init.xavier_uniform_(self.audio_cross_attn.kv_linear.weight)
+                if self.audio_cross_attn.kv_linear.bias is not None:
+                    nn.init.zeros_(self.audio_cross_attn.kv_linear.bias)
+            if hasattr(self.audio_cross_attn, 'proj'):
+                nn.init.xavier_uniform_(self.audio_cross_attn.proj.weight)
+                if self.audio_cross_attn.proj.bias is not None:
+                    nn.init.zeros_(self.audio_cross_attn.proj.bias)
 
     def forward(
         self,

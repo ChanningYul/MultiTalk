@@ -27,6 +27,8 @@ import os
 import sys
 import logging
 import argparse
+import socket
+import subprocess
 from pathlib import Path
 
 # 添加项目路径
@@ -35,6 +37,116 @@ sys.path.append(str(Path(__file__).parent))
 from distributed_multitalk_core import _parse_args
 from distributed_generator import DistributedMultiTalkGenerator
 from distributed_web_interface import create_gradio_interface
+
+
+def check_port_available(port, host='0.0.0.0'):
+    """检查端口是否可用
+    
+    Args:
+        port (int): 要检查的端口号
+        host (str): 主机地址，默认为'0.0.0.0'
+        
+    Returns:
+        bool: 端口可用返回True，否则返回False
+    """
+    try:
+        # 创建socket对象
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        
+        # 尝试绑定端口
+        result = sock.bind((host, port))
+        sock.close()
+        return True
+        
+    except socket.error as e:
+        return False
+
+
+def find_available_port(start_port, max_attempts=10):
+    """寻找可用端口
+    
+    Args:
+        start_port (int): 起始端口号
+        max_attempts (int): 最大尝试次数
+        
+    Returns:
+        int: 可用的端口号，如果找不到返回None
+    """
+    for i in range(max_attempts):
+        port = start_port + i
+        if check_port_available(port):
+            return port
+    return None
+
+
+def get_port_process_info(port):
+    """获取占用端口的进程信息
+    
+    Args:
+        port (int): 端口号
+        
+    Returns:
+        str: 进程信息字符串，如果获取失败返回None
+    """
+    try:
+        if os.name == 'nt':  # Windows系统
+            # 使用netstat命令查找占用端口的进程
+            result = subprocess.run(
+                ['netstat', '-ano'], 
+                capture_output=True, 
+                text=True, 
+                timeout=10
+            )
+            
+            if result.returncode == 0:
+                lines = result.stdout.split('\n')
+                for line in lines:
+                    if f':{port}' in line and 'LISTENING' in line:
+                        parts = line.split()
+                        if len(parts) >= 5:
+                            pid = parts[-1]
+                            try:
+                                # 获取进程名称
+                                tasklist_result = subprocess.run(
+                                    ['tasklist', '/FI', f'PID eq {pid}', '/FO', 'CSV'],
+                                    capture_output=True,
+                                    text=True,
+                                    timeout=5
+                                )
+                                if tasklist_result.returncode == 0:
+                                    lines = tasklist_result.stdout.strip().split('\n')
+                                    if len(lines) >= 2:
+                                        # 解析CSV格式的输出
+                                        process_line = lines[1].replace('"', '').split(',')
+                                        if len(process_line) >= 1:
+                                            process_name = process_line[0]
+                                            return f"进程: {process_name} (PID: {pid})"
+                                return f"PID: {pid}"
+                            except:
+                                return f"PID: {pid}"
+        else:  # Linux/Mac系统
+            result = subprocess.run(
+                ['lsof', '-i', f':{port}'], 
+                capture_output=True, 
+                text=True, 
+                timeout=10
+            )
+            
+            if result.returncode == 0 and result.stdout.strip():
+                lines = result.stdout.strip().split('\n')
+                if len(lines) > 1:
+                    # 解析lsof输出
+                    parts = lines[1].split()
+                    if len(parts) >= 2:
+                        process_name = parts[0]
+                        pid = parts[1]
+                        return f"进程: {process_name} (PID: {pid})"
+                        
+    except Exception as e:
+        pass
+        
+    return None
 
 
 def main():
@@ -55,8 +167,73 @@ def main():
     # 解析参数
     args = _parse_args()
     
+    # 首先检查端口可用性，避免在模型加载后才发现端口被占用
+    print("🔍 检查端口可用性...")
+    if not check_port_available(args.server_port):
+        print(f"❌ 端口 {args.server_port} 已被占用！")
+        
+        # 获取占用端口的进程信息
+        process_info = get_port_process_info(args.server_port)
+        if process_info:
+            print(f"📋 占用端口的进程: {process_info}")
+        
+        # 尝试寻找可用端口
+        print("🔍 正在寻找可用端口...")
+        available_port = find_available_port(args.server_port, max_attempts=20)
+        
+        if available_port:
+            print(f"✅ 找到可用端口: {available_port}")
+            print(f"📝 建议使用以下命令重新启动:")
+            
+            # 构建建议的启动命令
+            if hasattr(args, 'ulysses_size') and args.ulysses_size > 1:
+                cmd_parts = [
+                    "torchrun",
+                    f"--nproc_per_node={args.ulysses_size}",
+                    "--master_port=29500",
+                    "distributed_multitalk_app.py",
+                    f"--ulysses_size={args.ulysses_size}",
+                    f"--ring_size={args.ring_size}"
+                ]
+                
+                if args.t5_fsdp:
+                    cmd_parts.append("--t5_fsdp")
+                if args.dit_fsdp:
+                    cmd_parts.append("--dit_fsdp")
+                    
+                cmd_parts.append(f"--server_port={available_port}")
+                
+                if hasattr(args, 'num_persistent_param_in_dit') and args.num_persistent_param_in_dit is not None:
+                    cmd_parts.append(f"--num_persistent_param_in_dit={args.num_persistent_param_in_dit}")
+                    
+                print(f"   {' '.join(cmd_parts)}")
+            else:
+                print(f"   python distributed_multitalk_app.py --server_port={available_port}")
+                
+            print("\n❓ 是否使用可用端口继续启动？(y/n): ", end="")
+            try:
+                choice = input().strip().lower()
+                if choice in ['y', 'yes', '是', '']:
+                    args.server_port = available_port
+                    print(f"✅ 已更新服务端口为: {available_port}")
+                else:
+                    print("❌ 用户取消启动")
+                    sys.exit(1)
+            except KeyboardInterrupt:
+                print("\n❌ 用户中断启动")
+                sys.exit(1)
+        else:
+            print(f"❌ 无法找到可用端口 (尝试范围: {args.server_port}-{args.server_port+19})")
+            print("💡 建议:")
+            print("   1. 检查并关闭占用端口的程序")
+            print("   2. 手动指定其他端口号")
+            print("   3. 重启系统释放端口")
+            sys.exit(1)
+    else:
+        print(f"✅ 端口 {args.server_port} 可用")
+    
     # 显示配置信息
-    print("配置信息:")
+    print("\n配置信息:")
     print(f"- 任务类型: {args.task}")
     print(f"- 视频分辨率: {args.size}")
     print(f"- 帧数: {args.frame_num}")

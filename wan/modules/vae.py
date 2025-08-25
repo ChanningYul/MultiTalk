@@ -108,6 +108,22 @@ class Resample(nn.Module):
         else:
             self.resample = nn.Identity()
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 resample 层的参数
+        if hasattr(self.resample, 'reset_parameters'):
+            self.resample.reset_parameters()
+        elif isinstance(self.resample, nn.Sequential):
+            for layer in self.resample:
+                if hasattr(layer, 'reset_parameters'):
+                    layer.reset_parameters()
+        
+        # 重新初始化 time_conv 层的参数（如果存在）
+        if hasattr(self, 'time_conv') and hasattr(self.time_conv, 'reset_parameters'):
+            self.time_conv.reset_parameters()
+
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         b, c, t, h, w = x.size()
         if self.mode == 'upsample3d':
@@ -209,6 +225,19 @@ class ResidualBlock(nn.Module):
         self.shortcut = CausalConv3d(in_dim, out_dim, 1) \
             if in_dim != out_dim else nn.Identity()
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 residual 序列中的参数
+        for layer in self.residual:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+        
+        # 重新初始化 shortcut 层的参数
+        if hasattr(self.shortcut, 'reset_parameters'):
+            self.shortcut.reset_parameters()
+
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         h = self.shortcut(x)
         for layer in self.residual:
@@ -245,6 +274,23 @@ class AttentionBlock(nn.Module):
         self.proj = nn.Conv2d(dim, dim, 1)
 
         # zero out the last layer params
+        nn.init.zeros_(self.proj.weight)
+
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 norm 层的参数
+        if hasattr(self.norm, 'reset_parameters'):
+            self.norm.reset_parameters()
+        
+        # 重新初始化 to_qkv 层的参数
+        if hasattr(self.to_qkv, 'reset_parameters'):
+            self.to_qkv.reset_parameters()
+        
+        # 重新初始化 proj 层的参数并将权重置零
+        if hasattr(self.proj, 'reset_parameters'):
+            self.proj.reset_parameters()
         nn.init.zeros_(self.proj.weight)
 
     def forward(self, x):
@@ -324,6 +370,29 @@ class Encoder3d(nn.Module):
         self.head = nn.Sequential(
             RMS_norm(out_dim, images=False), nn.SiLU(),
             CausalConv3d(out_dim, z_dim, 3, padding=1))
+
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 conv1 层的参数
+        if hasattr(self.conv1, 'reset_parameters'):
+            self.conv1.reset_parameters()
+        
+        # 重新初始化 downsamples 序列中的参数
+        for layer in self.downsamples:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+        
+        # 重新初始化 middle 序列中的参数
+        for layer in self.middle:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+        
+        # 重新初始化 head 序列中的参数
+        for layer in self.head:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
 
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         if feat_cache is not None:
@@ -430,6 +499,29 @@ class Decoder3d(nn.Module):
             RMS_norm(out_dim, images=False), nn.SiLU(),
             CausalConv3d(out_dim, 3, 3, padding=1))
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 conv1 层的参数
+        if hasattr(self.conv1, 'reset_parameters'):
+            self.conv1.reset_parameters()
+        
+        # 重新初始化 middle 序列中的参数
+        for layer in self.middle:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+        
+        # 重新初始化 upsamples 序列中的参数
+        for layer in self.upsamples:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+        
+        # 重新初始化 head 序列中的参数
+        for layer in self.head:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+
     def forward(self, x, feat_cache=None, feat_idx=[0]):
         ## conv1
         if feat_cache is not None:
@@ -516,6 +608,26 @@ class WanVAE_(nn.Module):
         self.conv2 = CausalConv3d(z_dim, z_dim, 1)
         self.decoder = Decoder3d(dim, z_dim, dim_mult, num_res_blocks,
                                  attn_scales, self.temperal_upsample, dropout)
+
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 encoder 的参数
+        if hasattr(self.encoder, 'reset_parameters'):
+            self.encoder.reset_parameters()
+        
+        # 重新初始化 conv1 层的参数
+        if hasattr(self.conv1, 'reset_parameters'):
+            self.conv1.reset_parameters()
+        
+        # 重新初始化 conv2 层的参数
+        if hasattr(self.conv2, 'reset_parameters'):
+            self.conv2.reset_parameters()
+        
+        # 重新初始化 decoder 的参数
+        if hasattr(self.decoder, 'reset_parameters'):
+            self.decoder.reset_parameters()
 
     def forward(self, x):
         mu, log_var = self.encode(x)

@@ -24,6 +24,14 @@ class SelfAttention(nn.Module):
         self.o = nn.Linear(dim, dim)
         self.dropout = nn.Dropout(dropout)
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        for layer in [self.q, self.k, self.v, self.o]:
+            if hasattr(layer, 'reset_parameters'):
+                layer.reset_parameters()
+
     def forward(self, x, mask):
         """
         x:   [B, L, C].

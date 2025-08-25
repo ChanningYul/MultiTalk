@@ -24,6 +24,15 @@ class AdaIN1d(nn.Module):
         self.norm = nn.InstanceNorm1d(num_features, affine=True)
         self.fc = nn.Linear(style_dim, num_features*2)
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        if hasattr(self.norm, 'reset_parameters'):
+            self.norm.reset_parameters()
+        if hasattr(self.fc, 'reset_parameters'):
+            self.fc.reset_parameters()
+
     def forward(self, x, s):
         h = self.fc(s)
         h = h.view(h.size(0), h.size(1), 1)

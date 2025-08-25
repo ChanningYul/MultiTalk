@@ -14,6 +14,13 @@ class LinearNorm(nn.Module):
         self.linear_layer = nn.Linear(in_dim, out_dim, bias=bias)
         nn.init.xavier_uniform_(self.linear_layer.weight, gain=nn.init.calculate_gain(w_init_gain))
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        if hasattr(self.linear_layer, 'reset_parameters'):
+            self.linear_layer.reset_parameters()
+
     def forward(self, x):
         return self.linear_layer(x)
 
@@ -25,6 +32,13 @@ class LayerNorm(nn.Module):
         self.eps = eps
         self.gamma = nn.Parameter(torch.ones(channels))
         self.beta = nn.Parameter(torch.zeros(channels))
+
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        nn.init.ones_(self.gamma)
+        nn.init.zeros_(self.beta)
 
     def forward(self, x):
         x = x.transpose(1, -1)

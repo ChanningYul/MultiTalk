@@ -224,6 +224,24 @@ class SingleStreamAttention(nn.Module):
         self.add_q_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
         self.add_k_norm = norm_layer(self.head_dim) if qk_norm else nn.Identity()
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 q_linear 层的参数
+        if hasattr(self.q_linear, 'reset_parameters'):
+            self.q_linear.reset_parameters()
+        
+        # 重新初始化 q_norm 和 k_norm 层的参数
+        if hasattr(self.q_norm, 'reset_parameters'):
+            self.q_norm.reset_parameters()
+        if hasattr(self.k_norm, 'reset_parameters'):
+            self.k_norm.reset_parameters()
+        
+        # 重新初始化 proj 层的参数
+        if hasattr(self.proj, 'reset_parameters'):
+            self.proj.reset_parameters()
+
     def forward(self, x: torch.Tensor, encoder_hidden_states: torch.Tensor, shape=None, enable_sp=False, kv_seq=None) -> torch.Tensor:
        
         N_t, N_h, N_w = shape

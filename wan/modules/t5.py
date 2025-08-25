@@ -63,6 +63,12 @@ class T5LayerNorm(nn.Module):
         self.eps = eps
         self.weight = nn.Parameter(torch.ones(dim))
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        nn.init.ones_(self.weight)
+
     def forward(self, x):
         x = x * torch.rsqrt(x.float().pow(2).mean(dim=-1, keepdim=True) +
                             self.eps)
@@ -87,6 +93,19 @@ class T5Attention(nn.Module):
         self.v = nn.Linear(dim, dim_attn, bias=False)
         self.o = nn.Linear(dim_attn, dim, bias=False)
         self.dropout = nn.Dropout(dropout)
+
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        if hasattr(self.q, 'reset_parameters'):
+            self.q.reset_parameters()
+        if hasattr(self.k, 'reset_parameters'):
+            self.k.reset_parameters()
+        if hasattr(self.v, 'reset_parameters'):
+            self.v.reset_parameters()
+        if hasattr(self.o, 'reset_parameters'):
+            self.o.reset_parameters()
 
     def forward(self, x, context=None, mask=None, pos_bias=None):
         """
@@ -138,6 +157,21 @@ class T5FeedForward(nn.Module):
         self.fc2 = nn.Linear(dim_ffn, dim, bias=False)
         self.dropout = nn.Dropout(dropout)
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 gate 序列中的线性层
+        for module in self.gate:
+            if hasattr(module, 'reset_parameters'):
+                module.reset_parameters()
+        
+        # 重新初始化其他线性层
+        if hasattr(self.fc1, 'reset_parameters'):
+            self.fc1.reset_parameters()
+        if hasattr(self.fc2, 'reset_parameters'):
+            self.fc2.reset_parameters()
+
     def forward(self, x):
         x = self.fc1(x) * self.gate(x)
         x = self.dropout(x)
@@ -171,6 +205,21 @@ class T5SelfAttention(nn.Module):
         self.ffn = T5FeedForward(dim, dim_ffn, dropout)
         self.pos_embedding = None if shared_pos else T5RelativeEmbedding(
             num_buckets, num_heads, bidirectional=True)
+
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        if hasattr(self.norm1, 'reset_parameters'):
+            self.norm1.reset_parameters()
+        if hasattr(self.attn, 'reset_parameters'):
+            self.attn.reset_parameters()
+        if hasattr(self.norm2, 'reset_parameters'):
+            self.norm2.reset_parameters()
+        if hasattr(self.ffn, 'reset_parameters'):
+            self.ffn.reset_parameters()
+        if self.pos_embedding is not None and hasattr(self.pos_embedding, 'reset_parameters'):
+            self.pos_embedding.reset_parameters()
 
     def forward(self, x, mask=None, pos_bias=None):
         e = pos_bias if self.shared_pos else self.pos_embedding(
@@ -208,6 +257,25 @@ class T5CrossAttention(nn.Module):
         self.pos_embedding = None if shared_pos else T5RelativeEmbedding(
             num_buckets, num_heads, bidirectional=False)
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        if hasattr(self.norm1, 'reset_parameters'):
+            self.norm1.reset_parameters()
+        if hasattr(self.self_attn, 'reset_parameters'):
+            self.self_attn.reset_parameters()
+        if hasattr(self.norm2, 'reset_parameters'):
+            self.norm2.reset_parameters()
+        if hasattr(self.cross_attn, 'reset_parameters'):
+            self.cross_attn.reset_parameters()
+        if hasattr(self.norm3, 'reset_parameters'):
+            self.norm3.reset_parameters()
+        if hasattr(self.ffn, 'reset_parameters'):
+            self.ffn.reset_parameters()
+        if self.pos_embedding is not None and hasattr(self.pos_embedding, 'reset_parameters'):
+            self.pos_embedding.reset_parameters()
+
     def forward(self,
                 x,
                 mask=None,
@@ -234,6 +302,13 @@ class T5RelativeEmbedding(nn.Module):
 
         # layers
         self.embedding = nn.Embedding(num_buckets, num_heads)
+
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        if hasattr(self.embedding, 'reset_parameters'):
+            self.embedding.reset_parameters()
 
     def forward(self, lq, lk):
         device = self.embedding.weight.device

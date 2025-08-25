@@ -408,6 +408,21 @@ class Head(nn.Module):
         # modulation
         self.modulation = nn.Parameter(torch.randn(1, 2, dim) / dim**0.5)
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        # 重新初始化 norm 层的参数
+        if hasattr(self.norm, 'reset_parameters'):
+            self.norm.reset_parameters()
+        
+        # 重新初始化线性层的参数
+        if hasattr(self.head, 'reset_parameters'):
+            self.head.reset_parameters()
+        
+        # 重新初始化 modulation 参数
+        nn.init.normal_(self.modulation, mean=0.0, std=1.0 / self.dim**0.5)
+
     def forward(self, x, e):
         r"""
         Args:

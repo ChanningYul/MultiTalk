@@ -71,6 +71,15 @@ class SelfAttention(nn.Module):
         self.to_qkv = nn.Linear(dim, dim * 3)
         self.proj = nn.Linear(dim, dim)
 
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        if hasattr(self.to_qkv, 'reset_parameters'):
+            self.to_qkv.reset_parameters()
+        if hasattr(self.proj, 'reset_parameters'):
+            self.proj.reset_parameters()
+
     def forward(self, x):
         """
         x:   [B, L, C].
@@ -102,6 +111,17 @@ class SwiGLU(nn.Module):
         self.fc1 = nn.Linear(dim, mid_dim)
         self.fc2 = nn.Linear(dim, mid_dim)
         self.fc3 = nn.Linear(mid_dim, dim)
+
+    def reset_parameters(self):
+        """
+        重新初始化模块中的所有参数，用于 FSDP 兼容性
+        """
+        if hasattr(self.fc1, 'reset_parameters'):
+            self.fc1.reset_parameters()
+        if hasattr(self.fc2, 'reset_parameters'):
+            self.fc2.reset_parameters()
+        if hasattr(self.fc3, 'reset_parameters'):
+            self.fc3.reset_parameters()
 
     def forward(self, x):
         x = F.silu(self.fc1(x)) * self.fc2(x)
